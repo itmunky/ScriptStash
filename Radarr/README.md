@@ -29,7 +29,7 @@ Or Manually with the below
     ```
 
 This process will take some time - Mine ran for just shy of 2 hours, But at the end i started Radarr and no more error messages. 
-![image](https://github.com/user-attachments/assets/dc4bde95-474d-48fa-bfed-6077a3d02a44)
+![image](https://github.com/user-attachments/assets/1e1a2b7e-99ee-4c6a-85ff-04e5fc078be6)
 
 
 ### Acknowledgments
