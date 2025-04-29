@@ -28,7 +28,7 @@ Or Manually with the below
     ./improved_radarr_recovery.sh
     ```
 
-This process will take some time - Mine ran for just shy of 2 hours, But at the end i started Radarr and no more error messages. 
+The recovery process on my database took around 6 Minutes (Prior to implementing Performance enhancements it took 2 hours) 
 ![image](https://github.com/user-attachments/assets/1e1a2b7e-99ee-4c6a-85ff-04e5fc078be6)
 
 
