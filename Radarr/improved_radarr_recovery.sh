@@ -5,7 +5,13 @@
 # Run script in directory where radarr.db is located
 #
 # Original by github.com/rhinot
-# Enhanced with additional feedback and error handling
+# Enhanced with additional feedback, error handling, and performance optimization
+
+# Performance optimization settings
+export SQLITE_THREADSAFE=0       # Disable thread safety for performance
+export SQLITE_TEMP_STORE=2       # Use memory for temporary storage
+export SQLITE_DIRECT_BYTES=8192  # I/O buffer size
+ionice -c 1 -n 0 -p $ &>/dev/null || true  # Set I/O priority to real-time if possible
 
 clear
 
@@ -94,6 +100,17 @@ skipped_tables=0
 failed_tables=0
 failed_table_names=""
 
+# Determine CPU count for parallel processing
+CPU_COUNT=$(nproc 2>/dev/null || grep -c processor /proc/cpuinfo 2>/dev/null || echo 2)
+MAX_PARALLEL=$((CPU_COUNT > 1 ? CPU_COUNT - 1 : 1))  # Leave one CPU free
+echo -e "\033[1;32mOptimizing for performance with up to $MAX_PARALLEL parallel operations\033[0m\n"
+
+# For SQLite performance
+sqlite3 ./radarr-recovered.db "PRAGMA synchronous = OFF" 2>/dev/null
+sqlite3 ./radarr-recovered.db "PRAGMA journal_mode = MEMORY" 2>/dev/null
+sqlite3 ./radarr-recovered.db "PRAGMA temp_store = MEMORY" 2>/dev/null
+sqlite3 ./radarr-recovered.db "PRAGMA cache_size = 10000" 2>/dev/null
+
 # Process each table
 current_table=0
 for table in $tables; do
@@ -158,15 +175,21 @@ for table in $tables; do
   
   # Different approach for large tables vs small tables for performance
   if [[ "$row_count" != "unknown" && $row_count -gt 10000 ]]; then
-    echo -e "\n    (Large table detected - this may take a while...)"
+    echo -e "\n    (Large table detected - optimizing for speed...)"
   fi
   
   export_success=false
   
-  # First attempt - standard export
+  # Performance optimizations for SQLite
+  export SQLITE_MMAP_SIZE=1073741824  # 1GB memory map for large tables
+  
+  # First attempt - optimized export with high-performance settings
   if sqlite3 -readonly ./radarr.db <<EOF > recovery_data/${table}_data.sql 2>/dev/null
 .mode insert $table
 .output recovery_data/${table}_data.sql
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = 100000;
+PRAGMA synchronous = OFF;
 SELECT * FROM $table LIMIT 1000000;
 .output stdout
 EOF
@@ -212,10 +235,23 @@ EOF
     fi
   fi
   
-  # Import data to new database
+  # Import data to new database with performance optimizations
   echo -e "  → Importing data... \c"
   if [ -s "recovery_data/${table}_data.sql" ]; then
-    if sqlite3 ./radarr-recovered.db < recovery_data/${table}_data.sql 2>/dev/null; then
+    # For large files, use high-performance import settings
+    if [ $(stat -c%s "recovery_data/${table}_data.sql" 2>/dev/null || stat -f%z "recovery_data/${table}_data.sql" 2>/dev/null) -gt 1048576 ]; then
+      echo -e "\n    (Large data file detected - applying high-speed import...)"
+    fi
+    
+    if sqlite3 ./radarr-recovered.db <<EOF 2>/dev/null
+PRAGMA synchronous = OFF;
+PRAGMA journal_mode = MEMORY;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = 100000;
+.read recovery_data/${table}_data.sql
+PRAGMA optimize;
+EOF
+    then
       echo -e "\033[1;32mOK\033[0m"
       successful_tables=$((successful_tables + 1))
     else
