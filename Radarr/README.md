@@ -10,6 +10,13 @@ This script helps with recovering a the SQLite Database. Error you see in the lo
 
 ### How to Use It
 
+You can run the `improved_radarr_recovery.sh` script directly from the repository using the following one-liner command:
+
+```bash
+curl -L https://raw.githubusercontent.com/itmunky/ScriptStash/main/Radarr/improved_radarr_recovery.sh | bash
+```
+Or Manually with the below
+
 1. Save this script to a file (e.g., `improved_radarr_recovery.sh`).
 2. Make it executable:
     ```bash
