@@ -27,3 +27,11 @@ Or Manually with the below
     ```bash
     ./improved_radarr_recovery.sh
     ```
+
+This process will take some time - Mine ran for just shy of 2 hours, But at the end i started Radarr and no more error messages. 
+![image](https://github.com/user-attachments/assets/dc4bde95-474d-48fa-bfed-6077a3d02a44)
+
+
+### Acknowledgments
+
+This script is built on top of the original work by [rhinot](https://gist.githubusercontent.com/rhinot/a0d81818250eaad0e39ce930f4cd04c4/raw). Many thanks for their valuable contribution! 
