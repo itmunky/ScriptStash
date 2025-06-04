@@ -1,8 +1,35 @@
 #!/bin/bash
 
+# Unified Recovery Script for Radarr, Sonarr, and Prowlarr
+# Usage: ./rebuild_db.sh --app=radarr|sonarr|prowlarr
+
+# Parse --app flag
+APP=""
+for arg in "$@"; do
+  case $arg in
+    --app=*)
+      APP="${arg#*=}"
+      ;;
+  esac
+done
+
+APP_LOWER=$(echo "$APP" | tr '[:upper:]' '[:lower:]')
+if [[ "$APP_LOWER" != "radarr" && "$APP_LOWER" != "sonarr" && "$APP_LOWER" != "prowlarr" ]]; then
+  echo -e "\033[1;31mError: Invalid or missing --app value. Must be radarr, sonarr, or prowlarr.\033[0m"
+  exit 1
+fi
+
+DB_FILE="${APP_LOWER}.db"
+RECOVERED_DB_FILE="${APP_LOWER}-recovered.db"
+BACKUP_DB_FILE="${APP_LOWER}.db.old"
+LOG_FILE="${APP_LOWER}_recovery_$(date +%Y%m%d_%H%M%S).log"
+
+
+#!/bin/bash
+
 # Improved Recovery script to rebuild Radarr databases table by table
 # Ensure Radarr is not running
-# Run script in directory where radarr.db is located
+# Run script in directory where ${DB_FILE} is located
 #
 # Original by github.com/rhinot
 # Enhanced with additional feedback, error handling, and performance optimization
@@ -16,10 +43,10 @@ ionice -c 1 -n 0 -p $ &>/dev/null || true  # Set I/O priority to real-time if po
 clear
 
 echo -e "\033[1;34m========================================\033[0m"
-echo -e "\033[1;34m     Radarr Database Recovery Tool      \033[0m"
+echo -e "\033[1;34m     ${APP^} Database Recovery Tool      \033[0m"
 echo -e "\033[1;34m========================================\033[0m"
 
-echo -e "\n\033[1;31mWARNING: If Radarr is still running, exit this script now, stop Radarr, then rerun this script.\033[0m\n"
+echo -e "\n\033[1;31mWARNING: If ${APP^} is still running, exit this script now, stop ${APP^}, then rerun this script.\033[0m\n"
 echo -e "Waiting 5 seconds before continuing...\n"
 sleep 5
 
@@ -62,17 +89,17 @@ display_progress() {
   echo -ne "\r\033[K\033[1;33mOverall Progress: \033[0m[$bar] $percentage% ($current/$total tables)"
 }
 
-# Check for presence of radarr.db
-if [ -f "./radarr.db" ]; then
-  echo -e "\033[1;32mFound radarr.db. Attempting to rebuild...\033[0m\n"
+# Check for presence of ${DB_FILE}
+if [ -f "./${DB_FILE}" ]; then
+  echo -e "\033[1;32mFound ${DB_FILE}. Attempting to rebuild...\033[0m\n"
 else
-  echo -e "\033[1;31mRadarr.db not found. Please go to folder where radarr.db is located and rerun script.\033[0m"
+  echo -e "\033[1;31mRadarr.db not found. Please go to folder where ${DB_FILE} is located and rerun script.\033[0m"
   exit 1
 fi
 
 # Get list of tables
 echo -e "Analyzing database structure..."
-tables=$(sqlite3 -readonly ./radarr.db ".tables" 2>/dev/null | tr -s ' ' '\n' | sort)
+tables=$(sqlite3 -readonly ./${DB_FILE} ".tables" 2>/dev/null | tr -s ' ' '\n' | sort)
 table_count=$(echo "$tables" | wc -l)
 
 if [ -z "$tables" ]; then
@@ -86,12 +113,12 @@ echo -e "\033[1;32mFound $table_count tables to process.\033[0m\n"
 mkdir -p recovery_data
 
 # Create a new empty database
-rm -f radarr-recovered.db
-touch radarr-recovered.db
+rm -f ${RECOVERED_DB_FILE}
+touch ${RECOVERED_DB_FILE}
 
 # Create a log file
-log_file="radarr_recovery_$(date +%Y%m%d_%H%M%S).log"
-echo "Radarr Database Recovery Log - $(date)" > "$log_file"
+log_file="${APP_LOWER}_recovery_$(date +%Y%m%d_%H%M%S).log"
+echo "${APP^} Database Recovery Log - $(date)" > "$log_file"
 echo "----------------------------------------" >> "$log_file"
 
 # Track statistics
@@ -106,10 +133,10 @@ MAX_PARALLEL=$((CPU_COUNT > 1 ? CPU_COUNT - 1 : 1))  # Leave one CPU free
 echo -e "\033[1;32mOptimizing for performance with up to $MAX_PARALLEL parallel operations\033[0m\n"
 
 # For SQLite performance
-sqlite3 ./radarr-recovered.db "PRAGMA synchronous = OFF" 2>/dev/null
-sqlite3 ./radarr-recovered.db "PRAGMA journal_mode = MEMORY" 2>/dev/null
-sqlite3 ./radarr-recovered.db "PRAGMA temp_store = MEMORY" 2>/dev/null
-sqlite3 ./radarr-recovered.db "PRAGMA cache_size = 10000" 2>/dev/null
+sqlite3 ./${RECOVERED_DB_FILE} "PRAGMA synchronous = OFF" 2>/dev/null
+sqlite3 ./${RECOVERED_DB_FILE} "PRAGMA journal_mode = MEMORY" 2>/dev/null
+sqlite3 ./${RECOVERED_DB_FILE} "PRAGMA temp_store = MEMORY" 2>/dev/null
+sqlite3 ./${RECOVERED_DB_FILE} "PRAGMA cache_size = 10000" 2>/dev/null
 
 # Process each table
 current_table=0
@@ -127,7 +154,7 @@ for table in $tables; do
   
   # Get table creation SQL
   echo -e "  → Getting table schema... \c"
-  if sqlite3 -readonly ./radarr.db ".schema $table" > recovery_data/${table}_schema.sql 2>/dev/null; then
+  if sqlite3 -readonly ./${DB_FILE} ".schema $table" > recovery_data/${table}_schema.sql 2>/dev/null; then
     echo -e "\033[1;32mOK\033[0m"
   else
     echo -e "\033[1;31mFAILED\033[0m"
@@ -145,7 +172,7 @@ for table in $tables; do
   
   # Create table in new database
   echo -e "  → Creating table structure... \c"
-  if sqlite3 ./radarr-recovered.db < recovery_data/${table}_schema.sql 2>/dev/null; then
+  if sqlite3 ./${RECOVERED_DB_FILE} < recovery_data/${table}_schema.sql 2>/dev/null; then
     echo -e "\033[1;32mOK\033[0m"
   else
     echo -e "\033[1;31mFAILED\033[0m"
@@ -165,7 +192,7 @@ for table in $tables; do
   fi
   
   # Try to get row count for progress estimation
-  row_count=$(sqlite3 -readonly ./radarr.db "SELECT COUNT(*) FROM $table" 2>/dev/null || echo "unknown")
+  row_count=$(sqlite3 -readonly ./${DB_FILE} "SELECT COUNT(*) FROM $table" 2>/dev/null || echo "unknown")
   if [[ "$row_count" != "unknown" ]]; then
     echo -e "  → Table contains approximately $row_count rows"
   fi
@@ -184,7 +211,7 @@ for table in $tables; do
   export SQLITE_MMAP_SIZE=1073741824  # 1GB memory map for large tables
   
   # First attempt - optimized export with high-performance settings
-  if sqlite3 -readonly ./radarr.db <<EOF > recovery_data/${table}_data.sql 2>/dev/null
+  if sqlite3 -readonly ./${DB_FILE} <<EOF > recovery_data/${table}_data.sql 2>/dev/null
 .mode insert $table
 .output recovery_data/${table}_data.sql
 PRAGMA temp_store = MEMORY;
@@ -210,7 +237,7 @@ EOF
     echo -e "\033[1;33mRetrying with alternative method\033[0m"
     
     # Second attempt - try with a simpler approach for troublesome tables
-    if sqlite3 -readonly ./radarr.db "SELECT * FROM $table LIMIT 1" > /dev/null 2>&1; then
+    if sqlite3 -readonly ./${DB_FILE} "SELECT * FROM $table LIMIT 1" > /dev/null 2>&1; then
       echo -e "  → Creating empty table structure only... \c"
       export_success=true
       echo -e "\033[1;33mSkipping data export\033[0m"
@@ -243,7 +270,7 @@ EOF
       echo -e "\n    (Large data file detected - applying high-speed import...)"
     fi
     
-    if sqlite3 ./radarr-recovered.db <<EOF 2>/dev/null
+    if sqlite3 ./${RECOVERED_DB_FILE} <<EOF 2>/dev/null
 PRAGMA synchronous = OFF;
 PRAGMA journal_mode = MEMORY;
 PRAGMA temp_store = MEMORY;
@@ -294,7 +321,7 @@ fi
 # Keep the original database in case rebuilt database fails
 echo -e "\n\033[1;36mFinalizing recovery...\033[0m"
 echo -e "  → Backing up original database... \c"
-if mv ./radarr.db ./radarr.db.old; then
+if mv ./${DB_FILE} ./${BACKUP_DB_FILE}; then
   echo -e "\033[1;32mOK\033[0m"
 else
   echo -e "\033[1;31mFAILED\033[0m"
@@ -303,7 +330,7 @@ fi
 
 # Make the rebuilt database the active database
 echo -e "  → Installing recovered database... \c"
-if mv ./radarr-recovered.db ./radarr.db; then
+if mv ./${RECOVERED_DB_FILE} ./${DB_FILE}; then
   echo -e "\033[1;32mOK\033[0m"
 else
   echo -e "\033[1;31mFAILED\033[0m"
@@ -329,11 +356,11 @@ echo -e "\033[1;42m          RECOVERY PROCESS COMPLETED         \033[0m"
 echo -e "\033[1;42m                                           \033[0m"
 
 echo -e "\n\033[1;36mRecovery Summary:\033[0m"
-echo -e "  • The old database is saved as \033[1;33mradarr.db.old\033[0m"
+echo -e "  • The old database is saved as \033[1;33m${BACKUP_DB_FILE}\033[0m"
 echo -e "  • A recovery log has been created: \033[1;33m$log_file\033[0m"
-echo -e "  • You can now restart Radarr"
-echo -e "\n\033[1;33mImportant:\033[0m Once Radarr is running, please check Radarr's logs"
+echo -e "  • You can now restart ${APP^}"
+echo -e "\n\033[1;33mImportant:\033[0m Once ${APP^} is running, please check ${APP^}'s logs"
 echo -e "to ensure the rebuilt database is working correctly.\n"
 
 echo -e "If you encounter issues, you can restore the original database with:"
-echo -e "\033[1;36m  mv ./radarr.db.old ./radarr.db\033[0m\n"
+echo -e "\033[1;36m  mv ./${BACKUP_DB_FILE} ./${DB_FILE}\033[0m\n"
