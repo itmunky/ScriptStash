@@ -32,14 +32,14 @@ This universal script helps with recovering SQLite databases across all popular 
 You can run the `universal_arr_recovery.sh` script directly from the repository by navigating to the directory where your database file is located (e.g., "radarr.db", "sonarr.db", etc.) and use the following command:
 
 ```bash
-curl -L https://raw.githubusercontent.com/itmunky/ScriptStash/main/Universal-arr/universal_arr_recovery.sh | bash
+curl -L https://raw.githubusercontent.com/itmunky/ScriptStash/refs/heads/main/Universal-Arr/universal_arr_recovery.sh | bash
 ```
 
 #### Manual Installation
 
 1. Save the script to a file:
     ```bash
-    wget https://raw.githubusercontent.com/itmunky/ScriptStash/main/Universal-arr/universal_arr_recovery.sh
+    wget https://raw.githubusercontent.com/itmunky/ScriptStash/refs/heads/main/Universal-Arr/universal_arr_recovery.sh
     ```
 
 2. Make it executable:
