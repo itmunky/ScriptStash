@@ -7,12 +7,19 @@
 #
 # Enhanced from original Radarr script by github.com/rhinot
 # Made universal for all *arr applications with performance optimization
+# Compatible with bash 3.x and 4.x
+
+# Check bash version and provide compatibility
+if [ -z "$BASH_VERSION" ]; then
+  echo "Error: This script requires bash to run"
+  exit 1
+fi
 
 # Performance optimization settings
 export SQLITE_THREADSAFE=0       # Disable thread safety for performance
 export SQLITE_TEMP_STORE=2       # Use memory for temporary storage
 export SQLITE_DIRECT_BYTES=8192  # I/O buffer size
-ionice -c 1 -n 0 -p $$ &>/dev/null || true  # Set I/O priority to real-time if possible
+ionice -c 1 -n 0 -p $ &>/dev/null || true  # Set I/O priority to real-time if possible
 
 clear
 
@@ -145,16 +152,33 @@ sleep 5
 # These are common across all *arr applications and are typically non-critical
 COMMON_SKIPPABLE_TABLES=("Commands" "ScheduledTasks" "CommandQueue" "Logs" "PendingInstallations" "UpdateHistory" "ExtraFiles")
 
-# Application-specific skippable tables
-declare -A APP_SPECIFIC_SKIPPABLE
-APP_SPECIFIC_SKIPPABLE["Lidarr"]="LastFmUsers TrackFiles PendingReleases"
-APP_SPECIFIC_SKIPPABLE["Radarr"]="NotificationStatus AutoTagging PendingReleases"
-APP_SPECIFIC_SKIPPABLE["Readarr"]="EditionFiles BookFiles PendingReleases"
-APP_SPECIFIC_SKIPPABLE["Sonarr"]="EpisodeFiles PendingReleases SceneMappings"
-APP_SPECIFIC_SKIPPABLE["Whisparr"]="MovieFiles PendingReleases SceneMappings"
+# Application-specific skippable tables using case statement for compatibility
+get_app_specific_skippable() {
+  case "$1" in
+    "Lidarr")
+      echo "LastFmUsers TrackFiles PendingReleases"
+      ;;
+    "Radarr") 
+      echo "NotificationStatus AutoTagging PendingReleases"
+      ;;
+    "Readarr")
+      echo "EditionFiles BookFiles PendingReleases"
+      ;;
+    "Sonarr")
+      echo "EpisodeFiles PendingReleases SceneMappings"
+      ;;
+    "Whisparr")
+      echo "MovieFiles PendingReleases SceneMappings"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
 
 # Combine common and app-specific skippable tables
-ALL_SKIPPABLE_TABLES="${COMMON_SKIPPABLE_TABLES[*]} ${APP_SPECIFIC_SKIPPABLE[$ARR_APP]}"
+APP_SPECIFIC_TABLES=$(get_app_specific_skippable "$ARR_APP")
+ALL_SKIPPABLE_TABLES="${COMMON_SKIPPABLE_TABLES[*]} $APP_SPECIFIC_TABLES"
 
 # Convert skippable tables to string for easier checking
 SKIPPABLE_TABLES_STR=$(echo "$ALL_SKIPPABLE_TABLES" | tr ' ' '|')
@@ -250,12 +274,24 @@ echo -e "\033[1;32mOptimizing for performance with up to $MAX_PARALLEL parallel 
 
 # Get list of tables
 echo -e "Analyzing $ARR_APP database structure..."
-tables=$(sqlite3 -readonly ./$DB_FILE ".tables" 2>/dev/null | tr -s ' ' '\n' | sort)
+tables=$(sqlite3 -readonly "./$DB_FILE" ".tables" 2>/dev/null | tr -s ' ' '\n' | sort)
 table_count=$(echo "$tables" | wc -l)
 
-if [ -z "$tables" ]; then
-  echo -e "\033[1;31mEmpty database. Unable to restore.\033[0m"
-  exit 1
+if [ -z "$tables" ] || [ "$table_count" -eq 0 ]; then
+  echo -e "\033[1;31mNo tables found in database or database is corrupted.\033[0m"
+  echo -e "\033[1;33mAttempting to check if database file exists and is readable...\033[0m"
+  
+  if [ ! -f "./$DB_FILE" ]; then
+    echo -e "\033[1;31mDatabase file './$DB_FILE' does not exist!\033[0m"
+    exit 1
+  elif [ ! -r "./$DB_FILE" ]; then
+    echo -e "\033[1;31mDatabase file './$DB_FILE' is not readable!\033[0m"
+    exit 1
+  else
+    echo -e "\033[1;31mDatabase appears to be severely corrupted and cannot be analyzed.\033[0m"
+    echo -e "\033[1;33mYou may need to restore from a backup if available.\033[0m"
+    exit 1
+  fi
 fi
 
 echo -e "\033[1;32mFound $table_count tables to process in $ARR_APP database.\033[0m\n"
